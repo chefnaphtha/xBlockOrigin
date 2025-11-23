@@ -2,14 +2,11 @@ import { type UsernameCallback, extractUsernameFromTweet } from './extractors'
 
 // scan timeline for tweets and call callback with found usernames
 export function scanTimeline(onUserFound: UsernameCallback): () => void {
-	const seenUsernames = new Set<string>()
-
 	// scan existing tweets
 	const existingTweets = document.querySelectorAll('[data-testid="tweet"]')
 	for (const tweet of existingTweets) {
 		const username = extractUsernameFromTweet(tweet)
-		if (username && !seenUsernames.has(username)) {
-			seenUsernames.add(username)
+		if (username) {
 			onUserFound(username)
 		}
 	}
@@ -26,8 +23,7 @@ export function scanTimeline(onUserFound: UsernameCallback): () => void {
 					node.dataset.testid === 'tweet'
 				) {
 					const username = extractUsernameFromTweet(node)
-					if (username && !seenUsernames.has(username)) {
-						seenUsernames.add(username)
+					if (username) {
 						onUserFound(username)
 					}
 				}
@@ -36,8 +32,7 @@ export function scanTimeline(onUserFound: UsernameCallback): () => void {
 				const tweets = node.querySelectorAll('[data-testid="tweet"]')
 				for (const tweet of tweets) {
 					const username = extractUsernameFromTweet(tweet)
-					if (username && !seenUsernames.has(username)) {
-						seenUsernames.add(username)
+					if (username) {
 						onUserFound(username)
 					}
 				}

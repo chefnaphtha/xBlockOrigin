@@ -4,6 +4,7 @@ import { getUserId } from '../Api/userQuery'
 import { isUserMuted, saveMutedUser } from '../Storage/database'
 import { countryCache, userIdCache } from '../Utils/cache'
 import { apiQueue } from '../Utils/rateLimit'
+import { injectCountryFlag } from './flagInjector'
 import { scanProfile } from './profileScanner'
 import { scanReplies } from './replyScanner'
 import { scanSearch } from './searchScanner'
@@ -12,6 +13,11 @@ import { scanTimeline } from './timelineScanner'
 async function getBlacklist(): Promise<string[]> {
 	const result = await chrome.storage.sync.get('blacklist')
 	return result.blacklist || []
+}
+
+async function getShowFlags(): Promise<boolean> {
+	const result = await chrome.storage.sync.get('showFlags')
+	return result.showFlags ?? false
 }
 
 function showToast(message: string) {
@@ -39,6 +45,17 @@ function showToast(message: string) {
 }
 
 async function processUser(username: string) {
+	const showFlags = await getShowFlags()
+
+	// always check cache first and inject flag if available
+	let country = countryCache.get(username)
+	if (country) {
+		if (showFlags) {
+			injectCountryFlag(username, country)
+		}
+		return
+	}
+
 	// get userId first - we need it to check if already muted and for muting
 	let userId = userIdCache.get(username)
 
@@ -61,20 +78,22 @@ async function processUser(username: string) {
 		return
 	}
 
-	let country = countryCache.get(username)
+	// fetch country for new users
+	country = await apiQueue.enqueue(() => getCountry(username))
 
 	if (!country) {
-		country = await apiQueue.enqueue(() => getCountry(username))
+		console.log(
+			`[xBlockOrigin] Could not fetch country for @${username}`
+		)
+		return
+	}
 
-		if (!country) {
-			console.log(
-				`[xBlockOrigin] Could not fetch country for @${username}`
-			)
-			return
-		}
+	console.log(`[xBlockOrigin] @${username} is from ${country}`)
+	countryCache.set(username, country)
 
-		console.log(`[xBlockOrigin] @${username} is from ${country}`)
-		countryCache.set(username, country)
+	// inject flag if enabled
+	if (showFlags) {
+		injectCountryFlag(username, country)
 	}
 
 	const blacklist = await getBlacklist()

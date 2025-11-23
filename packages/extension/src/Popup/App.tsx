@@ -1,6 +1,7 @@
 import { BlacklistSection } from './BlacklistSection'
 import { DebugPanel } from './DebugPanel'
 import { MutedUsersSection } from './MutedUsersSection'
+import { Settings } from './Settings'
 
 export function App() {
 	return (
@@ -17,6 +18,7 @@ export function App() {
 				xBlockOrigin
 			</div>
 
+			<Settings />
 			<BlacklistSection />
 			<MutedUsersSection />
 			<DebugPanel />

@@ -8,8 +8,6 @@ function extractUsernameFromNotification(element: Element): string | null {
 
 // scan notifications/replies for users
 export function scanReplies(onUserFound: UsernameCallback): () => void {
-	const seenUsernames = new Set<string>()
-
 	// scan existing notifications
 	const scanExisting = () => {
 		// notifications use various testids, scan all cells
@@ -17,8 +15,7 @@ export function scanReplies(onUserFound: UsernameCallback): () => void {
 
 		for (const cell of cells) {
 			const username = extractUsernameFromNotification(cell)
-			if (username && !seenUsernames.has(username)) {
-				seenUsernames.add(username)
+			if (username) {
 				onUserFound(username)
 			}
 		}
@@ -36,8 +33,7 @@ export function scanReplies(onUserFound: UsernameCallback): () => void {
 
 			const username = extractUsernameFromLink(link)
 
-			if (username && !seenUsernames.has(username)) {
-				seenUsernames.add(username)
+			if (username) {
 				onUserFound(username)
 			}
 		}

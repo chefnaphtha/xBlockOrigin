@@ -12,16 +12,13 @@ function extractUsernameFromUserCell(cellElement: Element): string | null {
 
 // scan search results for users
 export function scanSearch(onUserFound: UsernameCallback): () => void {
-	const seenUsernames = new Set<string>()
-
 	// scan existing user cells and tweets
 	const scanExisting = () => {
 		// scan user cells (people tab)
 		const userCells = document.querySelectorAll('[data-testid="UserCell"]')
 		for (const cell of userCells) {
 			const username = extractUsernameFromUserCell(cell)
-			if (username && !seenUsernames.has(username)) {
-				seenUsernames.add(username)
+			if (username) {
 				onUserFound(username)
 			}
 		}
@@ -30,8 +27,7 @@ export function scanSearch(onUserFound: UsernameCallback): () => void {
 		const tweets = document.querySelectorAll('[data-testid="tweet"]')
 		for (const tweet of tweets) {
 			const username = extractUsernameFromTweet(tweet)
-			if (username && !seenUsernames.has(username)) {
-				seenUsernames.add(username)
+			if (username) {
 				onUserFound(username)
 			}
 		}
