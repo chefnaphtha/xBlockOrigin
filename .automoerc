@@ -1,0 +1,4 @@
+persistentPaths = [
+	"~/.bun/install/cache"
+]
+setupScript = "bun install --frozen-lockfile"
