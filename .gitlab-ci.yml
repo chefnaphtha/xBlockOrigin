@@ -126,34 +126,7 @@ release:
   release:
     name: 'Release ${RELEASE_VERSION}'
     tag_name: '${RELEASE_VERSION}'
-    description: |
-      ## Release ${RELEASE_VERSION}
-
-      Built from commit ${CI_COMMIT_SHORT_SHA}
-
-      **⚠️ Both extensions are UNSIGNED - for personal/testing use only.**
-
-      ## Quick Install
-
-      ### Chrome/Edge (Developer Mode)
-      1. Download `xblockorigin-chrome-${RELEASE_VERSION}.zip`
-      2. Unzip to a permanent folder
-      3. Go to `chrome://extensions/` and enable **Developer Mode**
-      4. Click **"Load unpacked"** and select the unzipped folder
-
-      ### Firefox (Temporary - Standard Edition)
-      1. Download `xblockorigin-firefox-${RELEASE_VERSION}.zip`
-      2. Go to `about:debugging#/runtime/this-firefox`
-      3. Click **"Load Temporary Add-on"**
-      4. Select the ZIP or manifest.json inside it
-
-      ### Firefox (Permanent - Developer/Nightly/ESR)
-      1. Download `xblockorigin-firefox-${RELEASE_VERSION}.zip`
-      2. Go to `about:config` and set `xpinstall.signatures.required` to `false`
-      3. Go to `about:addons` → gear icon → **"Install Add-on From File"**
-      4. Select the downloaded ZIP
-
-      📖 **See README for detailed installation instructions and platform compatibility.**
+    description: 'Release ${RELEASE_VERSION} built from commit ${CI_COMMIT_SHORT_SHA}. Both extensions are UNSIGNED for personal/testing use only. See README for installation instructions.'
     assets:
       links:
         - name: "xBlockOrigin Chrome Extension (unsigned)"
