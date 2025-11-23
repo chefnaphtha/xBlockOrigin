@@ -72,10 +72,13 @@ package-chrome:
     - zip -r ../../xblockorigin-chrome-${RELEASE_VERSION}.zip .
     - cd ../..
     - echo "Chrome extension packaged as xblockorigin-chrome-${RELEASE_VERSION}.zip"
+    - echo "CHROME_JOB_ID=${CI_JOB_ID}" >> package-chrome.env
   artifacts:
     paths:
       - xblockorigin-chrome-${RELEASE_VERSION}.zip
     expire_in: 30 days
+    reports:
+      dotenv: package-chrome.env
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -103,10 +106,13 @@ package-firefox:
     - cd ../..
     - ls -lh xblockorigin-firefox-*
     - echo "Note Extension is unsigned. See README for installation instructions."
+    - echo "FIREFOX_JOB_ID=${CI_JOB_ID}" >> package-firefox.env
   artifacts:
     paths:
       - xblockorigin-firefox-*.zip
     expire_in: 30 days
+    reports:
+      dotenv: package-firefox.env
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -130,10 +136,10 @@ release:
     assets:
       links:
         - name: "xBlockOrigin Chrome Extension (unsigned)"
-          url: "${CI_PROJECT_URL}/-/jobs/${BUILD_JOB_ID}/artifacts/file/xblockorigin-chrome-${RELEASE_VERSION}.zip"
+          url: "${CI_PROJECT_URL}/-/jobs/${CHROME_JOB_ID}/artifacts/raw/xblockorigin-chrome-${RELEASE_VERSION}.zip"
           link_type: package
         - name: "xBlockOrigin Firefox Extension (unsigned)"
-          url: "${CI_PROJECT_URL}/-/jobs/${BUILD_JOB_ID}/artifacts/file/xblockorigin-firefox-${RELEASE_VERSION}.zip"
+          url: "${CI_PROJECT_URL}/-/jobs/${FIREFOX_JOB_ID}/artifacts/raw/xblockorigin-firefox-${RELEASE_VERSION}.zip"
           link_type: package
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
