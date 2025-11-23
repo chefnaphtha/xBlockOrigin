@@ -1,0 +1,166 @@
+stages:
+  - lint
+  - build
+  - package
+  - release
+
+variables:
+  RELEASE_VERSION: "r${CI_PIPELINE_IID}"
+  SEMVER_VERSION: "${CI_PIPELINE_IID}.0.0"
+
+# global cache configuration for bun jobs
+.bun_cache: &bun_cache
+  cache:
+    key:
+      files:
+        - bun.lockb
+    paths:
+      - node_modules/
+
+# lint and type check
+lint:
+  stage: lint
+  image: oven/bun:latest
+  <<: *bun_cache
+  script:
+    - bun install --frozen-lockfile
+    - bun run typecheck
+    - bun run lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# build both chrome and firefox versions with version injection
+build:
+  stage: build
+  image: oven/bun:latest
+  <<: *bun_cache
+  script:
+    - bun install --frozen-lockfile
+    - bun run build
+    - echo "Injecting version ${SEMVER_VERSION} into manifests"
+    - 'sed -i "s/\"version\": \".*\"/\"version\": \"${SEMVER_VERSION}\"/" dist/chrome/manifest.json'
+    - 'sed -i "s/\"version\": \".*\"/\"version\": \"${SEMVER_VERSION}\"/" dist/firefox/manifest.json'
+    - echo "BUILD_JOB_ID=${CI_JOB_ID}" >> build.env
+  artifacts:
+    paths:
+      - dist/chrome/
+      - dist/firefox/
+    expire_in: 30 days
+    reports:
+      dotenv: build.env
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# package chrome extension as zip
+"package:chrome":
+  stage: package
+  image: alpine:latest
+  cache:
+    key: apk-cache
+    paths:
+      - .apk-cache/
+  needs:
+    - job: build
+      artifacts: true
+  before_script:
+    - mkdir -p .apk-cache
+    - ln -s "$(pwd)/.apk-cache" /etc/apk/cache
+    - apk add zip
+  script:
+    - cd dist/chrome
+    - zip -r ../../xblockorigin-chrome-${RELEASE_VERSION}.zip .
+    - cd ../..
+    - echo "Chrome extension packaged as xblockorigin-chrome-${RELEASE_VERSION}.zip"
+  artifacts:
+    paths:
+      - xblockorigin-chrome-${RELEASE_VERSION}.zip
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# package firefox extension (unsigned)
+"package:firefox":
+  stage: package
+  image: node:20-alpine
+  cache:
+    key: npm-global-cache
+    paths:
+      - .npm-global/
+  needs:
+    - job: build
+      artifacts: true
+  before_script:
+    - mkdir -p .npm-global
+    - npm config set prefix "$(pwd)/.npm-global"
+    - export PATH="$(pwd)/.npm-global/bin:$PATH"
+    - npm install -g web-ext
+  script:
+    - cd dist/firefox
+    - echo "Building unsigned Firefox extension..."
+    - web-ext build --overwrite-dest --artifacts-dir=../../
+    - mv ../../*.zip ../../xblockorigin-firefox-${RELEASE_VERSION}.zip || true
+    - cd ../..
+    - ls -lh xblockorigin-firefox-*
+    - echo "Note: Extension is unsigned. See README for installation instructions."
+  artifacts:
+    paths:
+      - xblockorigin-firefox-*.zip
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# create gitlab release with artifacts
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: build
+      artifacts: true
+    - job: "package:chrome"
+      artifacts: true
+    - job: "package:firefox"
+      artifacts: true
+  script:
+    - echo "Creating release ${RELEASE_VERSION}"
+  release:
+    name: 'Release ${RELEASE_VERSION}'
+    tag_name: '${RELEASE_VERSION}'
+    description: |
+      ## Release ${RELEASE_VERSION}
+
+      Built from commit ${CI_COMMIT_SHORT_SHA}
+
+      **⚠️ Both extensions are UNSIGNED - for personal/testing use only.**
+
+      ## Quick Install
+
+      ### Chrome/Edge (Developer Mode)
+      1. Download `xblockorigin-chrome-${RELEASE_VERSION}.zip`
+      2. Unzip to a permanent folder
+      3. Go to `chrome://extensions/` and enable **Developer Mode**
+      4. Click **"Load unpacked"** and select the unzipped folder
+
+      ### Firefox (Temporary - Standard Edition)
+      1. Download `xblockorigin-firefox-${RELEASE_VERSION}.zip`
+      2. Go to `about:debugging#/runtime/this-firefox`
+      3. Click **"Load Temporary Add-on"**
+      4. Select the ZIP or manifest.json inside it
+
+      ### Firefox (Permanent - Developer/Nightly/ESR)
+      1. Download `xblockorigin-firefox-${RELEASE_VERSION}.zip`
+      2. Go to `about:config` and set `xpinstall.signatures.required` to `false`
+      3. Go to `about:addons` → gear icon → **"Install Add-on From File"**
+      4. Select the downloaded ZIP
+
+      📖 **See README for detailed installation instructions and platform compatibility.**
+    assets:
+      links:
+        - name: "xBlockOrigin Chrome Extension (unsigned)"
+          url: "${CI_PROJECT_URL}/-/jobs/${BUILD_JOB_ID}/artifacts/file/xblockorigin-chrome-${RELEASE_VERSION}.zip"
+          link_type: package
+        - name: "xBlockOrigin Firefox Extension (unsigned)"
+          url: "${CI_PROJECT_URL}/-/jobs/${BUILD_JOB_ID}/artifacts/file/xblockorigin-firefox-${RELEASE_VERSION}.zip"
+          link_type: package
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

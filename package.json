@@ -1,0 +1,31 @@
+{
+	"name": "xblockorigin",
+	"version": "1.0.0",
+	"type": "module",
+	"scripts": {
+		"build": "bun run clean && bun run build:firefox && bun run build:chrome",
+		"clean": "rm -rf dist",
+		"build:firefox": "bun run build:firefox:js && bun run build:firefox:assets",
+		"build:chrome": "bun run build:chrome:js && bun run build:chrome:assets",
+		"build:firefox:js": "mkdir -p dist/firefox && bun build packages/extension/src/Content/index.ts --outfile dist/firefox/content.js --target browser && bun build packages/extension/src/Background/index.ts --outfile dist/firefox/background.js --target browser && bun build packages/extension/src/Popup/index.tsx --outfile dist/firefox/popup.js --target browser",
+		"build:chrome:js": "mkdir -p dist/chrome && bun build packages/extension/src/Content/index.ts --outfile dist/chrome/content.js --target browser && bun build packages/extension/src/Background/index.ts --outfile dist/chrome/background.js --target browser && bun build packages/extension/src/Popup/index.tsx --outfile dist/chrome/popup.js --target browser",
+		"build:firefox:assets": "cp packages/extension/manifest.v2.json dist/firefox/manifest.json && cp packages/extension/src/Popup/popup.html dist/firefox/popup.html && cp packages/extension/src/Popup/themes.css dist/firefox/themes.css && cp packages/extension/src/Popup/theme-loader.js dist/firefox/theme-loader.js",
+		"build:chrome:assets": "cp packages/extension/manifest.v3.json dist/chrome/manifest.json && cp packages/extension/src/Popup/popup.html dist/chrome/popup.html && cp packages/extension/src/Popup/themes.css dist/chrome/themes.css && cp packages/extension/src/Popup/theme-loader.js dist/chrome/theme-loader.js",
+		"typecheck": "bunx tsc --noEmit",
+		"lint": "bunx @biomejs/biome check --fix --unsafe",
+		"format": "bunx @biomejs/biome format --fix",
+		"check": "bun run typecheck && bun run lint && bun run format"
+	},
+	"dependencies": {
+		"preact": "^10.24.3",
+		"valibot": "^0.42.1"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@types/bun": "latest",
+		"@types/chrome": "^0.0.278",
+		"@types/webextension-polyfill": "^0.12.1",
+		"typescript": "^5.6.3",
+		"webextension-polyfill": "^0.12.0"
+	}
+}

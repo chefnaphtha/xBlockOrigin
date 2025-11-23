@@ -1,0 +1,34 @@
+{
+	"manifest_version": 2,
+	"name": "xBlockOrigin",
+	"version": "1.0.0",
+	"description": "Automatically mute X.com users from specified countries",
+	"browser_specific_settings": {
+		"gecko": {
+			"id": "xblockorigin@napht.haus"
+		}
+	},
+	"permissions": [
+		"storage",
+		"tabs",
+		"activeTab",
+		"webRequest",
+		"webRequestBlocking",
+		"https://x.com/*",
+		"https://twitter.com/*"
+	],
+	"background": {
+		"scripts": ["background.js"],
+		"persistent": true
+	},
+	"content_scripts": [
+		{
+			"matches": ["https://x.com/*", "https://twitter.com/*"],
+			"js": ["content.js"],
+			"run_at": "document_idle"
+		}
+	],
+	"browser_action": {
+		"default_popup": "popup.html"
+	}
+}

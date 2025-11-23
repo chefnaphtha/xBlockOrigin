@@ -1,0 +1,83 @@
+/* X.com theme variables */
+
+/* Light mode */
+[data-theme="light"] {
+	--background: rgb(255, 255, 255);
+	--background-secondary: rgb(247, 249, 249);
+	--background-tertiary: rgb(239, 243, 244);
+	--border: rgb(239, 243, 244);
+	--text-primary: rgb(15, 20, 25);
+	--text-secondary: rgb(83, 100, 113);
+	--text-tertiary: rgb(113, 118, 123);
+	--accent: rgb(0, 0, 0);
+	--accent-hover: rgb(30, 30, 30);
+	--error: rgb(244, 33, 46);
+	--error-bg: rgb(255, 243, 245);
+	--warning-bg: rgb(255, 243, 205);
+	--warning-text: rgb(133, 100, 4);
+	--warning-border: rgb(255, 193, 7);
+}
+
+/* Dim mode */
+[data-theme="dim"] {
+	--background: rgb(21, 32, 43);
+	--background-secondary: rgb(30, 39, 50);
+	--background-tertiary: rgb(37, 51, 65);
+	--border: rgb(56, 68, 77);
+	--text-primary: rgb(247, 249, 249);
+	--text-secondary: rgb(139, 152, 165);
+	--text-tertiary: rgb(113, 118, 123);
+	--accent: rgb(0, 0, 0);
+	--accent-hover: rgb(30, 30, 30);
+	--error: rgb(244, 33, 46);
+	--error-bg: rgb(60, 9, 17);
+	--warning-bg: rgb(60, 49, 13);
+	--warning-text: rgb(255, 212, 59);
+	--warning-border: rgb(255, 193, 7);
+}
+
+/* Lights Out mode */
+[data-theme="lights-out"] {
+	--background: rgb(0, 0, 0);
+	--background-secondary: rgb(22, 24, 28);
+	--background-tertiary: rgb(32, 35, 39);
+	--border: rgb(47, 51, 54);
+	--text-primary: rgb(231, 233, 234);
+	--text-secondary: rgb(113, 118, 123);
+	--text-tertiary: rgb(83, 100, 113);
+	--accent: rgb(255, 255, 255);
+	--accent-hover: rgb(200, 200, 200);
+	--error: rgb(244, 33, 46);
+	--error-bg: rgb(40, 6, 11);
+	--warning-bg: rgb(40, 33, 9);
+	--warning-text: rgb(255, 212, 59);
+	--warning-border: rgb(255, 193, 7);
+}
+
+/* Base styles */
+html,
+body {
+	background: var(--background);
+	color: var(--text-primary);
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	width: 600px;
+	min-height: 400px;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+		Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+#root {
+	width: 100%;
+	height: 100%;
+}
