@@ -53,7 +53,7 @@ build:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 # package chrome extension as zip
-"package:chrome":
+package-chrome:
   stage: package
   image: alpine:latest
   cache:
@@ -80,7 +80,7 @@ build:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 # package firefox extension (unsigned)
-"package:firefox":
+package-firefox:
   stage: package
   image: node:20-alpine
   cache:
@@ -93,7 +93,7 @@ build:
   before_script:
     - mkdir -p .npm-global
     - npm config set prefix "$(pwd)/.npm-global"
-    - export PATH="$(pwd)/.npm-global/bin:$PATH"
+    - export PATH="$(pwd)/.npm-global/bin:${PATH}"
     - npm install -g web-ext
   script:
     - cd dist/firefox
@@ -102,7 +102,7 @@ build:
     - mv ../../*.zip ../../xblockorigin-firefox-${RELEASE_VERSION}.zip || true
     - cd ../..
     - ls -lh xblockorigin-firefox-*
-    - echo "Note: Extension is unsigned. See README for installation instructions."
+    - echo "Note Extension is unsigned. See README for installation instructions."
   artifacts:
     paths:
       - xblockorigin-firefox-*.zip
@@ -117,9 +117,9 @@ release:
   needs:
     - job: build
       artifacts: true
-    - job: "package:chrome"
+    - job: package-chrome
       artifacts: true
-    - job: "package:firefox"
+    - job: package-firefox
       artifacts: true
   script:
     - echo "Creating release ${RELEASE_VERSION}"
