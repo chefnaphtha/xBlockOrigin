@@ -62,35 +62,64 @@ export function useBlacklist() {
 	}
 }
 
-// hook for muted users from indexeddb
+// hook for muted users from chrome.storage.local
 export function useMutedUsers() {
 	const [users, setUsers] = useState<MutedUser[]>([])
 	const [loading, setLoading] = useState(true)
 
-	const loadUsers = async (isInitial = false) => {
-		if (isInitial) {
-			setLoading(true)
-		}
+	const loadUsers = async () => {
 		try {
 			const allUsers = await getAllMutedUsers()
 			setUsers(allUsers)
 		} catch (error) {
 			// ignore errors
 		} finally {
-			if (isInitial) {
-				setLoading(false)
-			}
+			setLoading(false)
 		}
 	}
 
 	useEffect(() => {
-		loadUsers(true)
-		const interval = setInterval(() => {
-			loadUsers(false)
-		}, 2000)
-		return () => {
-			clearInterval(interval)
+		loadUsers()
+
+		// listen for storage changes and update incrementally
+		const listener = (
+			changes: { [key: string]: chrome.storage.StorageChange },
+			areaName: string
+		) => {
+			if (areaName === 'local') {
+				setUsers((currentUsers) => {
+					let updated = [...currentUsers]
+
+					for (const [key, change] of Object.entries(changes)) {
+						if (!key.startsWith('muted:')) continue
+
+						if (change.newValue) {
+							// user added or updated
+							const user = change.newValue as MutedUser
+							const index = updated.findIndex(
+								(u) => u.userId === user.userId
+							)
+							if (index >= 0) {
+								updated[index] = user
+							} else {
+								updated.push(user)
+							}
+						} else if (change.oldValue) {
+							// user removed
+							const user = change.oldValue as MutedUser
+							updated = updated.filter(
+								(u) => u.userId !== user.userId
+							)
+						}
+					}
+
+					return updated
+				})
+			}
 		}
+
+		chrome.storage.onChanged.addListener(listener)
+		return () => chrome.storage.onChanged.removeListener(listener)
 	}, [])
 
 	return { users, loading, reload: loadUsers }
