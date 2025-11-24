@@ -49,7 +49,7 @@ function showToast(message: string) {
 async function processUser(username: string, tweetElement?: Element) {
 	// skip if already processing this user
 	if (inFlightUsers.has(username)) {
-		console.log(`[xBlockOrigin] Skipping @${username} - already processing`)
+		console.log(`[xBlockOrigin] Skipping @${username} - already in queue`)
 		return
 	}
 	inFlightUsers.add(username)
@@ -67,7 +67,10 @@ async function processUser(username: string, tweetElement?: Element) {
 		console.log(
 			`[xBlockOrigin] Fetching user data for @${username} (cache miss)`
 		)
-		const userData = await apiQueue.enqueue(() => getUserData(username))
+		const userData = await apiQueue.enqueue(
+			() => getUserData(username),
+			username
+		)
 
 		if (!userData) {
 			console.error(
@@ -102,7 +105,10 @@ async function processUser(username: string, tweetElement?: Element) {
 			console.log(
 				`[xBlockOrigin] Following status cache miss for @${username}, fetching user data`
 			)
-			const userData = await apiQueue.enqueue(() => getUserData(username))
+			const userData = await apiQueue.enqueue(
+				() => getUserData(username),
+				username
+			)
 
 			if (!userData) {
 				console.error(
@@ -151,7 +157,7 @@ async function processUser(username: string, tweetElement?: Element) {
 
 		// fetch country for new users
 		console.log(`[xBlockOrigin] Fetching country for @${username}`)
-		country = await apiQueue.enqueue(() => getCountry(username))
+		country = await apiQueue.enqueue(() => getCountry(username), username)
 
 		if (!country) {
 			console.log(
@@ -196,7 +202,7 @@ async function processUser(username: string, tweetElement?: Element) {
 		console.log(
 			`[xBlockOrigin] Attempting to mute @${username} (${userId}) from ${country}...`
 		)
-		const success = await apiQueue.enqueue(() => muteUser(userId))
+		const success = await apiQueue.enqueue(() => muteUser(userId), username)
 
 		if (!success) {
 			console.error(`[xBlockOrigin] Failed to mute @${username}`)
@@ -252,64 +258,85 @@ function getCurrentPage(): string {
 	return 'unknown'
 }
 
+function waitForNavigation(currentUrl: string): Promise<string> {
+	// race between popstate event and polling
+	const popstatePromise = new Promise<string>((resolve) => {
+		const handler = () => {
+			if (window.location.href !== currentUrl) {
+				resolve(window.location.href)
+			}
+		}
+		window.addEventListener('popstate', handler, { once: true })
+	})
+
+	const pollingPromise = new Promise<string>((resolve) => {
+		const checkUrl = () => {
+			if (window.location.href !== currentUrl) {
+				resolve(window.location.href)
+			} else {
+				setTimeout(checkUrl, 100)
+			}
+		}
+		checkUrl()
+	})
+
+	return Promise.race([popstatePromise, pollingPromise])
+}
+
 export function startOrchestrator() {
 	const cleanupFns: Array<() => void> = []
+	let running = true
 
 	const handleUser = (username: string, tweetElement?: Element) => {
 		processUser(username, tweetElement)
 	}
 
-	const currentPage = getCurrentPage()
-
-	switch (currentPage) {
-		case 'timeline':
-			cleanupFns.push(scanTimeline(handleUser))
-			break
-		case 'search':
-			cleanupFns.push(scanSearch(handleUser))
-			break
-		case 'notifications':
-			cleanupFns.push(scanReplies(handleUser))
-			break
-		case 'status':
-			cleanupFns.push(scanStatus(handleUser))
-			break
-		case 'profile':
-			cleanupFns.push(scanProfile(handleUser))
-			break
+	const startScanners = (page: string) => {
+		switch (page) {
+			case 'timeline':
+				cleanupFns.push(scanTimeline(handleUser))
+				break
+			case 'search':
+				cleanupFns.push(scanSearch(handleUser))
+				break
+			case 'notifications':
+				cleanupFns.push(scanReplies(handleUser))
+				break
+			case 'status':
+				cleanupFns.push(scanStatus(handleUser))
+				break
+			case 'profile':
+				cleanupFns.push(scanProfile(handleUser))
+				break
+		}
 	}
 
-	let lastUrl = window.location.href
-	const urlWatcher = setInterval(() => {
-		if (window.location.href !== lastUrl) {
-			lastUrl = window.location.href
+	const handleNavigation = async () => {
+		let currentUrl = window.location.href
+		startScanners(getCurrentPage())
 
+		while (running) {
+			const newUrl = await waitForNavigation(currentUrl)
+			if (!running) break
+
+			currentUrl = newUrl
+
+			// clear pending API requests on navigation
+			apiQueue.clear()
+
+			// cleanup old scanners
 			cleanupFns.forEach((fn) => fn())
 			cleanupFns.length = 0
 
-			const newPage = getCurrentPage()
-			switch (newPage) {
-				case 'timeline':
-					cleanupFns.push(scanTimeline(handleUser))
-					break
-				case 'search':
-					cleanupFns.push(scanSearch(handleUser))
-					break
-				case 'notifications':
-					cleanupFns.push(scanReplies(handleUser))
-					break
-				case 'status':
-					cleanupFns.push(scanStatus(handleUser))
-					break
-				case 'profile':
-					cleanupFns.push(scanProfile(handleUser))
-					break
-			}
+			// start new scanners
+			startScanners(getCurrentPage())
 		}
-	}, 1000)
+	}
+
+	handleNavigation()
 
 	return () => {
-		clearInterval(urlWatcher)
+		running = false
 		cleanupFns.forEach((fn) => fn())
 	}
 }
