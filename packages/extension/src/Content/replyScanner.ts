@@ -16,7 +16,7 @@ export function scanReplies(onUserFound: UsernameCallback): () => void {
 		for (const cell of cells) {
 			const username = extractUsernameFromNotification(cell)
 			if (username) {
-				onUserFound(username)
+				onUserFound(username, cell)
 			}
 		}
 
@@ -34,7 +34,7 @@ export function scanReplies(onUserFound: UsernameCallback): () => void {
 			const username = extractUsernameFromLink(link)
 
 			if (username) {
-				onUserFound(username)
+				onUserFound(username, tweet)
 			}
 		}
 	}
@@ -42,8 +42,69 @@ export function scanReplies(onUserFound: UsernameCallback): () => void {
 	scanExisting()
 
 	// watch for new notifications with mutationobserver
-	const observer = new MutationObserver(() => {
-		scanExisting()
+	const observer = new MutationObserver((mutations) => {
+		for (const mutation of mutations) {
+			for (const node of mutation.addedNodes) {
+				if (!(node instanceof Element)) continue
+
+				// check if the added node is a cell
+				if (
+					node instanceof HTMLElement &&
+					node.dataset.testid?.includes('cell')
+				) {
+					const username = extractUsernameFromNotification(node)
+					if (username) {
+						onUserFound(username, node)
+					}
+				}
+
+				// check if the added node is a tweet
+				if (
+					node instanceof HTMLElement &&
+					node.dataset.testid === 'tweet'
+				) {
+					const userNameElement = node.querySelector(
+						'[data-testid="User-Name"]'
+					)
+					if (userNameElement) {
+						const link =
+							userNameElement.querySelector('a[href^="/"]')
+						if (link) {
+							const username = extractUsernameFromLink(link)
+							if (username) {
+								onUserFound(username, node)
+							}
+						}
+					}
+				}
+
+				// check children for cells and tweets
+				const cells = node.querySelectorAll('[data-testid*="cell"]')
+				for (const cell of cells) {
+					const username = extractUsernameFromNotification(cell)
+					if (username) {
+						onUserFound(username, cell)
+					}
+				}
+
+				const tweets = node.querySelectorAll('[data-testid="tweet"]')
+				for (const tweet of tweets) {
+					const userNameElement = tweet.querySelector(
+						'[data-testid="User-Name"]'
+					)
+					if (userNameElement) {
+						const link =
+							userNameElement.querySelector('a[href^="/"]')
+						if (link) {
+							const username = extractUsernameFromLink(link)
+							if (username) {
+								onUserFound(username, tweet)
+							}
+						}
+					}
+				}
+			}
+		}
 	})
 
 	observer.observe(document.body, {

@@ -1,15 +1,19 @@
 import { type UsernameCallback, extractUsernameFromTweet } from './extractors'
 
-// scan timeline for tweets and call callback with found usernames
-export function scanTimeline(onUserFound: UsernameCallback): () => void {
+// scan post detail page (status page) for tweets/replies
+export function scanStatus(onUserFound: UsernameCallback): () => void {
 	// scan existing tweets
-	const existingTweets = document.querySelectorAll('[data-testid="tweet"]')
-	for (const tweet of existingTweets) {
-		const username = extractUsernameFromTweet(tweet)
-		if (username) {
-			onUserFound(username, tweet)
+	const scanExisting = () => {
+		const tweets = document.querySelectorAll('[data-testid="tweet"]')
+		for (const tweet of tweets) {
+			const username = extractUsernameFromTweet(tweet)
+			if (username) {
+				onUserFound(username, tweet)
+			}
 		}
 	}
+
+	scanExisting()
 
 	// watch for new tweets with mutationobserver
 	const observer = new MutationObserver((mutations) => {

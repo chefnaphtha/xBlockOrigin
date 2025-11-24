@@ -1,6 +1,6 @@
 // shared username extraction utilities
 
-export type UsernameCallback = (username: string) => void
+export type UsernameCallback = (username: string, element?: Element) => void
 
 // extract username from href path like /username or /username/status/123
 function extractUsernameFromHref(href: string): string | null {

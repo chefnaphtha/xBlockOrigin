@@ -4,9 +4,13 @@ Automatically mute X.com (Twitter) users from specified countries using X's new 
 
 ## Features
 
+- **Instant Post Hiding**: Posts from blacklisted users are hidden immediately with a 50% opacity overlay and 8px blur effect that adapts to your X.com theme
 - **Automatic Country Detection**: Uses X.com's AboutAccountQuery API to detect users' originating countries
 - **Customizable Blacklist**: Specify which countries to automatically mute
-- **Multi-Page Support**: Works on timeline, profiles, search results, and notifications
+- **Whitelist Support**: Whitelist specific users to never mute them, regardless of country
+- **Following Protection**: Optional setting to skip muting users you follow (enabled by default)
+- **Multi-Page Support**: Works on timeline, profiles, search results, post detail pages (with replies), and notifications
+- **Persistent Cache**: Country and following status cached to reduce API calls
 - **Mute Database**: Tracks all automatically muted users with username, country, and timestamp
 - **CSV Export**: Export your muted users list to CSV format
 - **Cross-Browser**: Supports both Chrome/Edge (Manifest V3) and Firefox (Manifest V2)
@@ -15,11 +19,19 @@ Automatically mute X.com (Twitter) users from specified countries using X's new 
 
 When you browse X.com, the extension:
 
-1. Scans pages for user profiles (timeline, search, profiles, notifications)
-2. Queries X.com's AboutAccountQuery API to get the user's originating country
-3. Checks if the country is in your blacklist
-4. Automatically mutes the user if their country matches
-5. Saves the muted user to a local database for tracking
+1. Scans pages for user profiles (timeline, search, profiles, post detail pages, notifications)
+2. Fetches user ID and following status from X.com's UserByScreenName API
+3. Checks if user is whitelisted (skips if true)
+4. Checks if you follow the user and if "mute following" is disabled (skips if true)
+5. Queries X.com's AboutAccountQuery API to get the user's originating country (cached for 24 hours)
+6. Checks if the country is in your blacklist
+7. **Immediately overlays the post** with a 50% opacity background (matching your theme) and 8px blur, while keeping the original post intact
+8. Automatically mutes the user via X.com's API if first time seeing them
+9. Saves the muted user to a local database for tracking
+
+The overlay approach preserves all post functionality - click handlers remain intact so you can interact with the post after unhiding it.
+
+All checks use persistent caching to minimize API requests and improve performance.
 
 ## Installation
 
@@ -81,17 +93,35 @@ For permanent installation of unsigned extensions:
    - Enter a country name (e.g., "United States", "Antarctica")
    - Click "Add" to add it to your blacklist
 
-2. **Browse X.com**
-   - The extension automatically scans for users as you browse
-   - When a user from a blacklisted country is found, they're automatically muted
-   - A toast notification appears when a user is muted
+2. **Manage Whitelist**
+   - Open the extension popup
+   - In the "Whitelisted Users" section, enter a username
+   - Click "Add" to whitelist them (they'll never be muted, regardless of country)
+   - Click the "×" next to a username to remove them from whitelist
 
-3. **View Muted Users**
+3. **Configure Settings**
+   - Open the extension popup and go to "Settings"
+   - Toggle "Show country flags" to display flags next to usernames
+   - Toggle "Also mute users you are following" (disabled by default means you won't mute users you follow)
+
+4. **Browse X.com**
+   - The extension automatically scans for users as you browse
+   - When a user from a blacklisted country is found, their posts are **immediately hidden** with a blurred overlay
+   - A toast notification appears when a user is muted via X.com's API
+
+5. **Interact with Hidden Posts**
+   - **Unhide**: Click "Unhide" on the overlay to reveal the post
+     - A notice appears below the unhidden post: "Post unhidden, but user is still muted"
+     - Click "Unmute and whitelist" to unmute via X.com API and add user to whitelist (unhides all their posts)
+     - Click "×" to dismiss the notice
+   - **Unmute and whitelist from overlay**: Click "Unmute and whitelist" on the overlay to immediately unmute the user via X.com API, add them to whitelist, and unhide all their posts
+
+6. **View Muted Users**
    - Open the extension popup to see all muted users
    - Sort by username, country, or mute date
    - View statistics about total muted users and top countries
 
-4. **Export Data**
+7. **Export Data**
    - Click "Export to CSV" in the popup
    - Download a CSV file with all muted users
 
@@ -129,11 +159,33 @@ xblockorigin/
 ├── packages/extension/
 │   ├── src/
 │   │   ├── Api/           # X.com GraphQL API client
+│   │   │   ├── countryQuery.ts       # Fetch user country
+│   │   │   ├── muteQuery.ts          # Mute user via API
+│   │   │   ├── unmuteQuery.ts        # Unmute user via API
+│   │   │   ├── userDataQuery.ts      # Combined userId + following fetch
+│   │   │   └── schemas.ts            # Valibot schemas
 │   │   ├── Background/    # Background service worker
 │   │   ├── Content/       # Content scripts & scanners
-│   │   ├── Popup/         # React popup UI
-│   │   ├── Storage/       # IndexedDB database
-│   │   └── Utils/         # Cache, rate limiter, CSV exporter
+│   │   │   ├── orchestrator.ts       # Main processing logic
+│   │   │   ├── postHider.ts          # Post hiding with overlay
+│   │   │   ├── hiddenPostNotice.ts   # Hidden post UI components
+│   │   │   ├── timelineScanner.ts    # Scan timeline
+│   │   │   ├── searchScanner.ts      # Scan search results
+│   │   │   ├── statusScanner.ts      # Scan post detail pages
+│   │   │   ├── replyScanner.ts       # Scan notifications/replies
+│   │   │   └── profileScanner.ts     # Scan profiles
+│   │   ├── Popup/         # Preact popup UI
+│   │   │   ├── WhitelistManager.tsx  # Whitelist UI
+│   │   │   └── Settings.tsx          # Settings UI
+│   │   ├── Storage/       # Data persistence
+│   │   │   ├── database.ts           # Muted users storage
+│   │   │   ├── whitelist.ts          # Whitelist storage
+│   │   │   ├── settings.ts           # Settings storage
+│   │   │   └── schema.ts             # Valibot schemas
+│   │   └── Utils/         # Utilities
+│   │       ├── cache.ts              # Persistent cache (24h + 5m TTL)
+│   │       ├── rateLimit.ts          # API request queue
+│   │       └── csvExporter.ts        # CSV export
 │   ├── manifest.v2.json   # Firefox manifest
 │   └── manifest.v3.json   # Chrome manifest
 ├── dist/
@@ -146,20 +198,38 @@ xblockorigin/
 
 ### API Endpoints
 
+- **UserByScreenName**: `https://x.com/i/api/graphql/-oaLodhGbbnzJBACb1kk2Q/UserByScreenName`
+  - Returns user ID and following status in a single call
+  - Used to fetch `rest_id` (user ID) and `relationship_perspectives.following`
 - **AboutAccountQuery**: `https://x.com/i/api/graphql/XRqGa7EeokUU5kppkh13EA/AboutAccountQuery`
   - Returns user's `account_based_in` field (originating country)
 - **MuteUser**: `https://x.com/i/api/graphql/mCclF7Y-cdl87NyYin5M_A/CreateMute`
   - Mutes a user by their user ID
+- **UnmuteUser**: `https://x.com/i/api/1.1/mutes/users/destroy.json`
+  - Unmutes a user by their user ID
+  - Called when "Unmute and whitelist" is clicked
 
 ### Storage
 
-- **IndexedDB**: Stores muted users (username, userId, country, mutedAt)
-- **chrome.storage.sync**: Stores country blacklist (syncs across devices)
+All data is stored using Chrome's storage APIs:
 
-### Rate Limiting
+- **chrome.storage.sync**: Stores country blacklist and settings (syncs across devices)
+- **chrome.storage.local**: Stores all local data:
+  - Muted users (username, userId, country, mutedAt)
+  - Whitelisted users (userId, username, whitelistedAt)
+  - Persistent cache with TTL:
+    - User IDs (username → userId, 24 hour TTL)
+    - Countries (username → country, 24 hour TTL)
+    - Following status (userId → boolean, 5 minute TTL)
 
-- API requests are rate-limited to 1 request per second
-- Country lookups are cached for 24 hours to reduce API load
+### Request Queue & Optimization
+
+- API requests are queued and processed sequentially (no concurrent requests)
+- Country lookups cached for 24 hours
+- Following status cached for 5 minutes
+- User ID lookups cached for 24 hours
+- In-flight request tracking prevents duplicate API calls for same user
+- Combined UserByScreenName call fetches both userId and following status in single request
 
 ### Browser Support
 
@@ -176,19 +246,30 @@ xblockorigin/
 
 - The extension requires an active X.com session to work
 - X.com's API may change, requiring updates to query IDs
-- Country detection is based on the App Store region where the account was created
+- Country detection is based on the geolocation of the user's IP and, according to X, is updated every 30 days
 
 ## CI/CD and Releases
 
 This project uses GitLab CI/CD for automated builds and unsigned releases.
 
+### Setup
+
+Install the pre-commit hook to enable automatic version bumping:
+
+```bash
+bun run scripts/setup-hooks.ts
+```
+
+This installs a pre-commit hook that automatically increments the major version on every commit (e.g., 1.0.0 → 2.0.0 → 3.0.0).
+
 ### How Releases Work
 
-Every push to the main branch automatically:
-1. Runs linting and type checks
-2. Builds both Chrome and Firefox versions
-3. Updates extension versions to match the release number (r1 → 1.0.0, r2 → 2.0.0, etc.)
-4. Packages both extensions as downloadable ZIP files
-5. Creates a GitLab release with auto-incremented version (r1, r2, r3...)
+When you push to the main branch with an incremented version:
 
-Releases follow a simple versioning scheme: **r1, r2, r3, r4...** where each number represents a pipeline run.
+1. **Verify**: CI checks that version was incremented (fails if pre-commit hook didn't run)
+2. **Lint**: Runs type checking and linting
+3. **Build**: Builds both Chrome and Firefox versions, injects version into manifests
+4. **Package**: Creates ZIP files for both browsers
+5. **Release**: Creates a GitLab release with tag derived from major version (1.0.0 → r1, 2.0.0 → r2, etc.)
+
+All extensions are **unsigned** for personal/testing use only.

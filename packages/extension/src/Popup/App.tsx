@@ -2,6 +2,7 @@ import { BlacklistSection } from './BlacklistSection'
 import { DebugPanel } from './DebugPanel'
 import { MutedUsersSection } from './MutedUsersSection'
 import { Settings } from './Settings'
+import { WhitelistSection } from './WhitelistSection'
 
 export function App() {
 	return (
@@ -20,6 +21,7 @@ export function App() {
 
 			<Settings />
 			<BlacklistSection />
+			<WhitelistSection />
 			<MutedUsersSection />
 			<DebugPanel />
 		</div>

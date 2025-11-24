@@ -1,23 +1,25 @@
 import { getCountry } from '../Api/countryQuery'
 import { muteUser } from '../Api/muteQuery'
-import { getUserId } from '../Api/userQuery'
+import { getUserData } from '../Api/userDataQuery'
 import { isUserMuted, saveMutedUser } from '../Storage/database'
-import { countryCache, userIdCache } from '../Utils/cache'
+import { getMuteFollowing } from '../Storage/settings'
+import { isWhitelisted } from '../Storage/whitelist'
+import { countryCache, followingCache, userIdCache } from '../Utils/cache'
 import { apiQueue } from '../Utils/rateLimit'
 import { injectCountryFlag } from './flagInjector'
+import { hidePost } from './postHider'
 import { scanProfile } from './profileScanner'
 import { scanReplies } from './replyScanner'
 import { scanSearch } from './searchScanner'
+import { scanStatus } from './statusScanner'
 import { scanTimeline } from './timelineScanner'
+
+// track users currently being processed to prevent race conditions
+const inFlightUsers = new Set<string>()
 
 async function getBlacklist(): Promise<string[]> {
 	const result = await chrome.storage.sync.get('blacklist')
 	return result.blacklist || []
-}
-
-async function getShowFlags(): Promise<boolean> {
-	const result = await chrome.storage.sync.get('showFlags')
-	return result.showFlags ?? false
 }
 
 function showToast(message: string) {
@@ -44,87 +46,179 @@ function showToast(message: string) {
 	}, 3000)
 }
 
-async function processUser(username: string) {
-	const showFlags = await getShowFlags()
-
-	// always check cache first and inject flag if available
-	let country = countryCache.get(username)
-	if (country) {
-		if (showFlags) {
-			injectCountryFlag(username, country)
-		}
+async function processUser(username: string, tweetElement?: Element) {
+	// skip if already processing this user
+	if (inFlightUsers.has(username)) {
+		console.log(`[xBlockOrigin] Skipping @${username} - already processing`)
 		return
 	}
+	inFlightUsers.add(username)
 
-	// get userId first - we need it to check if already muted and for muting
-	let userId = userIdCache.get(username)
+	console.log(`[xBlockOrigin] Processing user @${username}`)
+
+	const { getShowFlags } = await import('../Storage/settings')
+	const showFlags = await getShowFlags()
+
+	// get userId and following status - check cache first
+	let userId = await userIdCache.get(username)
+	let following = false
 
 	if (!userId) {
-		userId = await apiQueue.enqueue(() => getUserId(username))
+		console.log(
+			`[xBlockOrigin] Fetching user data for @${username} (cache miss)`
+		)
+		const userData = await apiQueue.enqueue(() => getUserData(username))
 
-		if (!userId) {
+		if (!userData) {
 			console.error(
-				`[xBlockOrigin] Failed to get user ID for @${username}`
+				`[xBlockOrigin] Failed to get user data for @${username}`
 			)
+			inFlightUsers.delete(username)
 			return
 		}
 
-		userIdCache.set(username, userId)
+		userId = userData.userId
+		following = userData.following
+
+		console.log(
+			`[xBlockOrigin] Got user data for @${username}: ${userId}, following: ${following}`
+		)
+		await userIdCache.set(username, userId)
+		await followingCache.set(userId, following)
+	} else {
+		console.log(
+			`[xBlockOrigin] User ID for @${username} from cache: ${userId}`
+		)
+
+		// check following cache
+		const cachedFollowing = await followingCache.get(userId)
+		if (cachedFollowing !== null) {
+			following = cachedFollowing
+			console.log(
+				`[xBlockOrigin] Following status for @${username} from cache: ${following}`
+			)
+		} else {
+			// userId cached but following status not - fetch user data to update
+			console.log(
+				`[xBlockOrigin] Following status cache miss for @${username}, fetching user data`
+			)
+			const userData = await apiQueue.enqueue(() => getUserData(username))
+
+			if (!userData) {
+				console.error(
+					`[xBlockOrigin] Failed to get user data for @${username}`
+				)
+				inFlightUsers.delete(username)
+				return
+			}
+
+			following = userData.following
+			await followingCache.set(userId, following)
+			console.log(
+				`[xBlockOrigin] Updated following status for @${username}: ${following}`
+			)
+		}
 	}
 
-	// check if this userId is already muted
-	const alreadyMuted = await isUserMuted(userId)
-	if (alreadyMuted) {
+	// check if whitelisted - skip all processing if true
+	const whitelisted = await isWhitelisted(userId)
+	if (whitelisted) {
+		inFlightUsers.delete(username)
 		return
 	}
 
-	// fetch country for new users
-	country = await apiQueue.enqueue(() => getCountry(username))
+	// check if we should skip users we follow
+	const muteFollowing = await getMuteFollowing()
+	if (!muteFollowing && following) {
+		console.log(
+			`[xBlockOrigin] Skipping @${username} - you are following this user`
+		)
+		inFlightUsers.delete(username)
+		return
+	}
+
+	// check cache first for country
+	let country = await countryCache.get(username)
+	let needsApiMute = false
 
 	if (!country) {
-		console.log(`[xBlockOrigin] Could not fetch country for @${username}`)
-		return
-	}
+		// check if this userId is already muted
+		const alreadyMuted = await isUserMuted(userId)
+		if (alreadyMuted) {
+			inFlightUsers.delete(username)
+			return
+		}
 
-	console.log(`[xBlockOrigin] @${username} is from ${country}`)
-	countryCache.set(username, country)
+		// fetch country for new users
+		console.log(`[xBlockOrigin] Fetching country for @${username}`)
+		country = await apiQueue.enqueue(() => getCountry(username))
+
+		if (!country) {
+			console.log(
+				`[xBlockOrigin] Could not fetch country for @${username}`
+			)
+			inFlightUsers.delete(username)
+			return
+		}
+
+		console.log(`[xBlockOrigin] @${username} is from ${country}`)
+		await countryCache.set(username, country)
+		needsApiMute = true
+	} else {
+		console.log(
+			`[xBlockOrigin] Country for @${username} from cache: ${country}`
+		)
+	}
 
 	// inject flag if enabled
 	if (showFlags) {
 		injectCountryFlag(username, country)
 	}
 
+	// check if country is blacklisted
 	const blacklist = await getBlacklist()
-
 	const isBlacklisted = blacklist.some(
 		(c) => c.toLowerCase() === country.toLowerCase()
 	)
 
 	if (!isBlacklisted) {
+		inFlightUsers.delete(username)
 		return
 	}
 
-	console.log(
-		`[xBlockOrigin] Attempting to mute @${username} (${userId}) from ${country}...`
-	)
-	const success = await apiQueue.enqueue(() => muteUser(userId))
-
-	if (!success) {
-		console.error(`[xBlockOrigin] Failed to mute @${username}`)
-		return
+	// hide post immediately if element is provided
+	if (tweetElement) {
+		hidePost(tweetElement, userId, username, country)
 	}
 
-	await saveMutedUser({
-		username,
-		userId,
-		country,
-		mutedAt: Date.now()
-	})
+	// only mute via API if this is a newly discovered blacklisted user
+	if (needsApiMute) {
+		console.log(
+			`[xBlockOrigin] Attempting to mute @${username} (${userId}) from ${country}...`
+		)
+		const success = await apiQueue.enqueue(() => muteUser(userId))
 
-	console.log(
-		`[xBlockOrigin] Successfully muted @${username} (${userId}) from ${country}`
-	)
-	showToast(`Muted @${username} from ${country}`)
+		if (!success) {
+			console.error(`[xBlockOrigin] Failed to mute @${username}`)
+			inFlightUsers.delete(username)
+			return
+		}
+
+		await saveMutedUser({
+			username,
+			userId,
+			country,
+			mutedAt: Date.now()
+		})
+
+		console.log(
+			`[xBlockOrigin] Successfully muted @${username} (${userId}) from ${country}`
+		)
+		showToast(`Muted @${username} from ${country}`)
+	}
+
+	// processing complete, remove from in-flight tracker
+	inFlightUsers.delete(username)
 }
 
 function getCurrentPage(): string {
@@ -142,6 +236,12 @@ function getCurrentPage(): string {
 		return 'notifications'
 	}
 
+	// check if this is a status page (post detail with replies)
+	// format: /{username}/status/{id}
+	if (path.includes('/status/')) {
+		return 'status'
+	}
+
 	const systemPages = ['explore', 'messages', 'settings', 'compose', 'i']
 	const firstSegment = path.split('/')[1]
 
@@ -155,8 +255,8 @@ function getCurrentPage(): string {
 export function startOrchestrator() {
 	const cleanupFns: Array<() => void> = []
 
-	const handleUser = (username: string) => {
-		processUser(username)
+	const handleUser = (username: string, tweetElement?: Element) => {
+		processUser(username, tweetElement)
 	}
 
 	const currentPage = getCurrentPage()
@@ -170,6 +270,9 @@ export function startOrchestrator() {
 			break
 		case 'notifications':
 			cleanupFns.push(scanReplies(handleUser))
+			break
+		case 'status':
+			cleanupFns.push(scanStatus(handleUser))
 			break
 		case 'profile':
 			cleanupFns.push(scanProfile(handleUser))
@@ -194,6 +297,9 @@ export function startOrchestrator() {
 					break
 				case 'notifications':
 					cleanupFns.push(scanReplies(handleUser))
+					break
+				case 'status':
+					cleanupFns.push(scanStatus(handleUser))
 					break
 				case 'profile':
 					cleanupFns.push(scanProfile(handleUser))

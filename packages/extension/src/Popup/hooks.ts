@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks'
 import { getAllMutedUsers } from '../Storage/database'
-import type { MutedUser } from '../Storage/schema'
+import { getAllWhitelistedUsers } from '../Storage/whitelist'
+import type { MutedUser, WhitelistedUser } from '../Storage/schema'
 
 // generic hook for chrome.storage.sync
 export function useStorage<T>(key: string, defaultValue: T) {
@@ -115,6 +116,44 @@ export function useMutedUsers() {
 
 					return updated
 				})
+			}
+		}
+
+		chrome.storage.onChanged.addListener(listener)
+		return () => chrome.storage.onChanged.removeListener(listener)
+	}, [])
+
+	return { users, loading, reload: loadUsers }
+}
+
+// hook for whitelisted users from chrome.storage.sync
+export function useWhitelist() {
+	const [users, setUsers] = useState<WhitelistedUser[]>([])
+	const [loading, setLoading] = useState(true)
+
+	const loadUsers = async () => {
+		try {
+			const allUsers = await getAllWhitelistedUsers()
+			setUsers(allUsers)
+		} catch (error) {
+			// ignore errors
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	useEffect(() => {
+		loadUsers()
+
+		// listen for storage changes
+		const listener = (
+			changes: { [key: string]: chrome.storage.StorageChange },
+			areaName: string
+		) => {
+			if (areaName === 'sync' && changes.whitelist) {
+				if (changes.whitelist.newValue) {
+					setUsers(changes.whitelist.newValue as WhitelistedUser[])
+				}
 			}
 		}
 
