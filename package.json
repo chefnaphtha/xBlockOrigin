@@ -1,8 +1,10 @@
 {
 	"name": "xblockorigin",
-	"version": "1.0.0",
+	"version": "21.0.0",
 	"type": "module",
 	"scripts": {
+		"postinstall": "bun run setup-hooks",
+		"setup-hooks": "bun scripts/setup-hooks.ts",
 		"build": "bun run clean && bun run build:firefox && bun run build:chrome",
 		"clean": "rm -rf dist",
 		"build:firefox": "bun run build:firefox:js && bun run build:firefox:assets",

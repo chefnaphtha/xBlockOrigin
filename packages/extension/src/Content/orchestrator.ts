@@ -82,9 +82,7 @@ async function processUser(username: string) {
 	country = await apiQueue.enqueue(() => getCountry(username))
 
 	if (!country) {
-		console.log(
-			`[xBlockOrigin] Could not fetch country for @${username}`
-		)
+		console.log(`[xBlockOrigin] Could not fetch country for @${username}`)
 		return
 	}
 
