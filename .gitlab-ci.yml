@@ -21,13 +21,10 @@ verify-version:
   before_script:
     - apk add --no-cache git jq
   script:
-    # extract current version
     - CURRENT_VERSION=$(jq -r '.version' package.json)
     - echo "Current version is ${CURRENT_VERSION}"
-    # extract previous version from last commit
     - PREVIOUS_VERSION=$(git show HEAD~1:package.json | jq -r '.version')
     - echo "Previous version was ${PREVIOUS_VERSION}"
-    # fail if version wasn't incremented
     - |
       if [ "$CURRENT_VERSION" = "$PREVIOUS_VERSION" ]; then
         echo "ERROR: Version was not incremented! Please ensure the pre-commit hook ran."
@@ -35,7 +32,6 @@ verify-version:
         exit 1
       fi
     - echo "Version was properly incremented: ${PREVIOUS_VERSION} → ${CURRENT_VERSION}"
-    # extract major version for release tag
     - MAJOR_VERSION=$(echo $CURRENT_VERSION | cut -d. -f1)
     - RELEASE_VERSION="r${MAJOR_VERSION}"
     - echo "RELEASE_VERSION=${RELEASE_VERSION}" >> version.env
