@@ -1,6 +1,6 @@
 {
 	"name": "xblockorigin",
-	"version": "25.0.0",
+	"version": "26.0.0",
 	"type": "module",
 	"scripts": {
 		"postinstall": "bun run setup-hooks",
