@@ -7,8 +7,8 @@ const preCommitPath = join(gitHooksDir, 'pre-commit')
 
 // check if .git/hooks exists
 if (!existsSync(gitHooksDir)) {
-	console.error('Error: .git/hooks directory not found. Are you in a git repository?')
-	process.exit(1)
+	console.log('Skipping git hooks setup (not in a git repository or CI environment)')
+	process.exit(0)
 }
 
 // create pre-commit hook
